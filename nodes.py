@@ -42,6 +42,7 @@ FLUX2_VAE_UNGATED = "black-forest-labs/FLUX.2-klein-4B"
 
 # Quality presets of Idol Image to 3D Gaussians. web/idol_presets.js reads this table from the node definition.
 PRESETS = {
+    "lowest": {"steps": 15, "num_gaussians": 65536},
     "low": {"steps": 25, "num_gaussians": 131072},
     "medium": {"steps": 50, "num_gaussians": 262144},
     "high": {"steps": 75, "num_gaussians": 524288},
@@ -356,11 +357,12 @@ class IdolGenerate:
                                                   "Off = ComfyUI keeps them on the GPU until the space is needed."}),
             },
             "optional": {
-                "mask": ("MASK", {"tooltip": "Object mask (1 = object). Skips background removal. An empty mask "
-                                             "is ignored (BiRefNet runs instead)."}),
-                "invert_mask": ("BOOLEAN", {"default": False, "tooltip":
-                                            "Turn on when the mask comes from Load Image: ComfyUI stores alpha "
-                                            "inverted there (1 = transparent)."}),
+                "mask": ("MASK", {"tooltip": "Object mask. Skips background removal. An empty mask is ignored "
+                                             "(BiRefNet runs instead)."}),
+                "invert_mask": ("BOOLEAN", {"default": True, "tooltip":
+                                            "On: the mask is 1 = transparent, as Load Image outputs it. "
+                                            "Off: the mask is 1 = object, as most background-removal nodes "
+                                            "output it."}),
             },
         }
 
@@ -371,7 +373,7 @@ class IdolGenerate:
     CATEGORY = "Idol"
 
     def generate(self, idol_model, image, mode, seed, steps, cfg_strength, rescale_t, num_gaussians, crop_margin,
-                 fast_sampling, offload_after_run, preset="custom", mask=None, invert_mask=False):
+                 fast_sampling, offload_after_run, preset="custom", mask=None, invert_mask=True):
         if preset in PRESETS:
             steps, num_gaussians = PRESETS[preset]["steps"], PRESETS[preset]["num_gaussians"]
         idol = _idol()

@@ -69,12 +69,13 @@ A ready-made workflow is in `example_workflows/`. ComfyUI lists it under the tem
 
    | preset | steps | num_gaussians |
    |---|---|---|
+   | lowest | 15 | 65,536 |
    | low | 25 | 131,072 |
    | medium (reference) | 50 | 262,144 |
    | high | 75 | 524,288 |
    | ultra | 100 | 1,048,576 |
 
-6. To skip background removal, connect a mask (1 = object). `Load Image` drops the alpha channel from `IMAGE` and outputs it inverted as `MASK`, so for a PNG with transparency connect that `MASK` and turn on `invert_mask`.
+6. To skip background removal, connect a mask. `Load Image` drops the alpha channel from `IMAGE` and outputs it inverted as `MASK` (1 = transparent). `invert_mask` is on by default for that, so for a PNG with transparency just connect the `MASK` of `Load Image`. For a mask with 1 = object (most background-removal nodes), turn `invert_mask` off.
 7. To view the result, connect `model_3d` of `Idol Save PLY` to the core `Preview Splat` node. `Get Splat` turns it into a `SPLAT` for the other core splat nodes (render, transform, splat to mesh).
 
 ## Convert the weights (optional)

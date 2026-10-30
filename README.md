@@ -11,7 +11,7 @@ ComfyUI-Idol adds three nodes to ComfyUI. The nodes turn one image into a 3D Gau
 
 ```bash
 cd ComfyUI/custom_nodes
-git clone <this repo> ComfyUI-Idol
+git clone https://github.com/anr2me/ComfyUI-Idol.git
 pip install -r ComfyUI-Idol/requirements.txt
 ```
 

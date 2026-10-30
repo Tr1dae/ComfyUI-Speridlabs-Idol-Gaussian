@@ -46,7 +46,7 @@ The optional input `custom_hf_repo` accepts a repository that you made with the 
 ## Nodes
 
 - Idol Model Loader: loads all weights to the CPU. It registers them with the model manager of ComfyUI (the part that moves models between the GPU and the CPU).
-- Idol Image to 3D Gaussians: takes an `IMAGE` and an optional `MASK`. It returns `IDOL_GAUSSIAN`, the preprocessed 1024-pixel image, and the predicted camera as JSON. It processes a batch one image at a time.
+- Idol Image to 3D Gaussians: takes an `IMAGE` and an optional `MASK`. It returns `IDOL_GAUSSIAN`, the preprocessed 1024-pixel image, and the predicted camera as JSON. It processes a batch one image at a time. The mask skips background removal.
 - Idol Save PLY: writes a `.ply` file to the output folder. It returns the absolute path of the file.
 
 ## Use

@@ -11,19 +11,27 @@ ComfyUI-Idol adds three nodes to ComfyUI. The nodes turn one image into a 3D Gau
 
 ```bash
 cd ComfyUI/custom_nodes
-git clone https://github.com/anr2me/ComfyUI-Idol.git
+git clone https://github.com/Tr1dae/ComfyUI-Speridlabs-Idol-Gaussian.git ComfyUI-Idol
 pip install -r ComfyUI-Idol/requirements.txt
+```
+
+On the Windows portable build, the embedded Python cannot build `idol-sdk` in an isolated environment (`Cannot import 'hatchling.build'`). Install the build backend first and turn off build isolation:
+
+```bash
+python_embeded\python.exe -m pip install hatchling
+python_embeded\python.exe -m pip install --no-build-isolation -r ComfyUI\custom_nodes\ComfyUI-Idol\requirements.txt
 ```
 
 ## Get access to the encoders
 
-Idol uses two gated encoders from Hugging Face. A gated model needs your approval of its terms before you can download it.
+Idol uses DINOv3, a gated encoder from Hugging Face. A gated model needs your approval of its terms before you can download it.
 
 1. Request access to [facebook/dinov3-vith16plus-pretrain-lvd1689m](https://huggingface.co/facebook/dinov3-vith16plus-pretrain-lvd1689m).
-2. Request access to [black-forest-labs/FLUX.2-dev](https://huggingface.co/black-forest-labs/FLUX.2-dev).
-3. Run `hf auth login`, or set the `HF_TOKEN` environment variable.
+2. Run `hf auth login`, or set the `HF_TOKEN` environment variable.
 
-The loader checks your access before it downloads large files. If access is missing, the loader names the repository that you must fix.
+The FLUX.2 VAE comes from [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) by default. That repository is not gated, and it holds the same VAE as FLUX.2-dev in bf16, the dtype that Idol runs the VAE in, so the results are identical. To use the gated [black-forest-labs/FLUX.2-dev](https://huggingface.co/black-forest-labs/FLUX.2-dev) instead, clear `flux2_vae_source`.
+
+The loader checks your access before it downloads large files. If access is missing, the loader names the repository that you must fix. Both encoders download to the Hugging Face cache, not to `ComfyUI/models`.
 
 ## Weights
 
@@ -47,15 +55,18 @@ The optional input `custom_hf_repo` accepts a repository that you made with the 
 
 - Idol Model Loader: loads all weights to the CPU. It registers them with the model manager of ComfyUI (the part that moves models between the GPU and the CPU).
 - Idol Image to 3D Gaussians: takes an `IMAGE` and an optional `MASK`. It returns `IDOL_GAUSSIAN`, the preprocessed 1024-pixel image, and the predicted camera as JSON. It processes a batch one image at a time. The mask skips background removal.
-- Idol Save PLY: writes a `.ply` file to the output folder. It returns the absolute path of the file.
+- Idol Save PLY: writes a `.ply` file to the output folder. It returns the absolute path of the file and `model_3d`, a 3D file that the core splat nodes accept.
 
 ## Use
+
+A ready-made workflow is in `example_workflows/`. ComfyUI lists it under the templates of this node pack.
 
 1. Connect `Load Image` to `Idol Image to 3D Gaussians`.
 2. Connect `Idol Model Loader` to `Idol Image to 3D Gaussians`.
 3. Connect `Idol Image to 3D Gaussians` to `Idol Save PLY`.
 4. Set `mode` to `real` for photographs. Set `mode` to `synthetic` for renders and generated images.
-5. To skip background removal, connect a mask.
+5. To skip background removal, connect a mask (1 = object). `Load Image` drops the alpha channel from `IMAGE` and outputs it inverted as `MASK`, so for a PNG with transparency connect that `MASK` and turn on `invert_mask`.
+6. To view the result, connect `model_3d` of `Idol Save PLY` to the core `Preview Splat` node. `Get Splat` turns it into a `SPLAT` for the other core splat nodes (render, transform, splat to mesh).
 
 ## Convert the weights (optional)
 

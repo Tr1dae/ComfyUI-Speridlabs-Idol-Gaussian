@@ -1,5 +1,5 @@
 # torch, torchvision, numpy, pillow and tqdm come with ComfyUI itself.
-idol @ git+https://github.com/speridlabs/idol-sdk.git
+idol @ git+https://github.com/speridlabs/idol-sdk.git@4702a7f00850e34b6e83a2170cc123c3e9570744
 transformers>=4.56
 diffusers>=0.36
 huggingface_hub>=0.34

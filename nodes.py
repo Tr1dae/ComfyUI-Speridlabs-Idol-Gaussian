@@ -20,6 +20,12 @@ import folder_paths
 
 from .idol_mm import load_to_gpu, make_patcher, module_of, unload_patchers
 
+try:
+    from comfy_api.latest import Types
+    File3D = Types.File3D
+except (ImportError, AttributeError):
+    File3D = None
+
 log = logging.getLogger("ComfyUI-Idol")
 
 GiB = 1024 ** 3
@@ -32,6 +38,7 @@ ACT_DENOISER_BATCH_CFG = int(3.0 * GiB)
 HF_REPO = "speridlabs/idol"
 HF_CHOICE = "speridlabs/idol (auto-download)"
 AUTO_DIRNAME = "speridlabs_idol"
+FLUX2_VAE_UNGATED = "black-forest-labs/FLUX.2-klein-4B"
 
 IDOL_DIR = os.path.join(folder_paths.models_dir, "idol")
 os.makedirs(IDOL_DIR, exist_ok=True)
@@ -178,9 +185,11 @@ class IdolModelLoader:
                 "dinov3_source": ("STRING", {"default": "", "tooltip":
                                              "Optional local folder (or HF repo id) for DINOv3 ViT-H+. "
                                              "Empty = the gated facebook repo from config.json."}),
-                "flux2_vae_source": ("STRING", {"default": "", "tooltip":
-                                                "Optional local folder (containing a 'vae' subfolder) or HF repo "
-                                                "id for FLUX.2. Empty = black-forest-labs/FLUX.2-dev."}),
+                "flux2_vae_source": ("STRING", {"default": FLUX2_VAE_UNGATED, "tooltip":
+                                                "Local folder (containing a 'vae' subfolder) or HF repo id for the "
+                                                "FLUX.2 VAE. The default (FLUX.2 klein, Apache-2.0, not gated) holds "
+                                                "the same VAE weights in bf16, which is the dtype Idol runs it in. "
+                                                "Empty = black-forest-labs/FLUX.2-dev (gated)."}),
             },
         }
 
@@ -333,7 +342,11 @@ class IdolGenerate:
                                                   "Off = ComfyUI keeps them on the GPU until the space is needed."}),
             },
             "optional": {
-                "mask": ("MASK", {"tooltip": "Object mask (1 = object). Skips background removal."}),
+                "mask": ("MASK", {"tooltip": "Object mask (1 = object). Skips background removal. An empty mask "
+                                             "is ignored (BiRefNet runs instead)."}),
+                "invert_mask": ("BOOLEAN", {"default": False, "tooltip":
+                                            "Turn on when the mask comes from Load Image: ComfyUI stores alpha "
+                                            "inverted there (1 = transparent)."}),
             },
         }
 
@@ -344,12 +357,19 @@ class IdolGenerate:
     CATEGORY = "Idol"
 
     def generate(self, idol_model, image, mode, seed, steps, cfg_strength, rescale_t, num_gaussians, crop_margin,
-                 fast_sampling, offload_after_run, mask=None):
+                 fast_sampling, offload_after_run, mask=None, invert_mask=False):
         idol = _idol()
         bundle: IdolBundle = idol_model
         batch = image.shape[0]
-        if mask is not None and mask.dim() == 2:
-            mask = mask[None]
+        if mask is not None:
+            if mask.dim() == 2:
+                mask = mask[None]
+            if invert_mask:
+                mask = 1.0 - mask
+            # Load Image outputs an all-zero 64x64 mask for images without alpha
+            if float(mask.max()) <= 0.0:
+                log.warning("Idol: the mask is empty, so it is ignored and BiRefNet removes the background.")
+                mask = None
         pbar = comfy.utils.ProgressBar(batch * steps)
 
         gaussians, previews, cameras = [], [], []
@@ -432,8 +452,9 @@ class IdolSavePLY:
             "filename_prefix": ("STRING", {"default": "idol/gaussian"}),
         }}
 
-    RETURN_TYPES = ("STRING",)
-    RETURN_NAMES = ("ply_path",)
+    # model_3d plugs into the core splat nodes (Preview Splat, Save Gaussian Splat, Get Splat).
+    RETURN_TYPES = ("STRING",) + (("FILE_3D_PLY",) if File3D is not None else ())
+    RETURN_NAMES = ("ply_path",) + (("model_3d",) if File3D is not None else ())
     FUNCTION = "save"
     OUTPUT_NODE = True
     CATEGORY = "Idol"
@@ -444,7 +465,8 @@ class IdolSavePLY:
         filename = f"{name}_{counter:05}_.ply"
         path = os.path.join(folder, filename)
         gaussian.save_ply(path)
-        return {"ui": {"text": [os.path.join(subfolder, filename)]}, "result": (path,)}
+        result = (path,) + ((File3D(path),) if File3D is not None else ())
+        return {"ui": {"text": [os.path.join(subfolder, filename)]}, "result": result}
 
 
 NODE_CLASS_MAPPINGS = {

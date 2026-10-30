@@ -65,8 +65,17 @@ A ready-made workflow is in `example_workflows/`. ComfyUI lists it under the tem
 2. Connect `Idol Model Loader` to `Idol Image to 3D Gaussians`.
 3. Connect `Idol Image to 3D Gaussians` to `Idol Save PLY`.
 4. Set `mode` to `real` for photographs. Set `mode` to `synthetic` for renders and generated images.
-5. To skip background removal, connect a mask (1 = object). `Load Image` drops the alpha channel from `IMAGE` and outputs it inverted as `MASK`, so for a PNG with transparency connect that `MASK` and turn on `invert_mask`.
-6. To view the result, connect `model_3d` of `Idol Save PLY` to the core `Preview Splat` node. `Get Splat` turns it into a `SPLAT` for the other core splat nodes (render, transform, splat to mesh).
+5. Pick a quality `preset`. It sets `steps` and `num_gaussians`. If you edit those values, the preset switches to `custom`.
+
+   | preset | steps | num_gaussians |
+   |---|---|---|
+   | low | 25 | 131,072 |
+   | medium (reference) | 50 | 262,144 |
+   | high | 75 | 524,288 |
+   | ultra | 100 | 1,048,576 |
+
+6. To skip background removal, connect a mask (1 = object). `Load Image` drops the alpha channel from `IMAGE` and outputs it inverted as `MASK`, so for a PNG with transparency connect that `MASK` and turn on `invert_mask`.
+7. To view the result, connect `model_3d` of `Idol Save PLY` to the core `Preview Splat` node. `Get Splat` turns it into a `SPLAT` for the other core splat nodes (render, transform, splat to mesh).
 
 ## Convert the weights (optional)
 

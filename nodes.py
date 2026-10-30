@@ -40,6 +40,14 @@ HF_CHOICE = "speridlabs/idol (auto-download)"
 AUTO_DIRNAME = "speridlabs_idol"
 FLUX2_VAE_UNGATED = "black-forest-labs/FLUX.2-klein-4B"
 
+# Quality presets of Idol Image to 3D Gaussians. web/idol_presets.js reads this table from the node definition.
+PRESETS = {
+    "low": {"steps": 25, "num_gaussians": 131072},
+    "medium": {"steps": 50, "num_gaussians": 262144},
+    "high": {"steps": 75, "num_gaussians": 524288},
+    "ultra": {"steps": 100, "num_gaussians": 1048576},
+}
+
 IDOL_DIR = os.path.join(folder_paths.models_dir, "idol")
 os.makedirs(IDOL_DIR, exist_ok=True)
 folder_paths.add_model_folder_path("idol", IDOL_DIR)
@@ -323,6 +331,12 @@ class IdolGenerate:
             "required": {
                 "idol_model": ("IDOL_MODEL",),
                 "image": ("IMAGE",),
+                "preset": (["custom"] + list(PRESETS), {"default": "medium", "idol_presets": PRESETS, "tooltip":
+                                                        "Sets steps and num_gaussians. " + "; ".join(
+                                                            f"{name}: {p['steps']} steps, {p['num_gaussians']:,} "
+                                                            f"gaussians" for name, p in PRESETS.items()) +
+                                                        ". medium is the reference setting. custom uses the "
+                                                        "values below. Editing them switches to custom."}),
                 "mode": (["synthetic", "real"], {"default": "synthetic", "tooltip":
                                                  "synthetic: renders / generated images (crop 1.2). "
                                                  "real: photographs (crop 1.7)."}),
@@ -357,7 +371,9 @@ class IdolGenerate:
     CATEGORY = "Idol"
 
     def generate(self, idol_model, image, mode, seed, steps, cfg_strength, rescale_t, num_gaussians, crop_margin,
-                 fast_sampling, offload_after_run, mask=None, invert_mask=False):
+                 fast_sampling, offload_after_run, preset="custom", mask=None, invert_mask=False):
+        if preset in PRESETS:
+            steps, num_gaussians = PRESETS[preset]["steps"], PRESETS[preset]["num_gaussians"]
         idol = _idol()
         bundle: IdolBundle = idol_model
         batch = image.shape[0]

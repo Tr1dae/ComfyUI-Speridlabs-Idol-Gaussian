@@ -38,7 +38,23 @@ ACT_DENOISER_BATCH_CFG = int(3.0 * GiB)
 HF_REPO = "speridlabs/idol"
 HF_CHOICE = "speridlabs/idol (auto-download)"
 AUTO_DIRNAME = "speridlabs_idol"
-FLUX2_VAE_UNGATED = "black-forest-labs/FLUX.2-klein-4B"
+
+# Default image encoders, from repos that are not gated, stored under models/idol/encoders.
+# timm's DINOv3 ViT-H+ is bit-identical to facebook/dinov3-vith16plus-pretrain-lvd1689m after the key renaming
+# in _dinov3_from_timm (Meta's q/v biases and mask token are all zero; timm leaves them out).
+# FLUX.2 klein ships the FLUX.2-dev VAE in bf16, the dtype Idol runs it in.
+DINOV3_TIMM_REPO = "timm/vit_huge_plus_patch16_dinov3.lvd1689m"
+FLUX2_VAE_REPO = "black-forest-labs/FLUX.2-klein-4B"
+FLUX2_VAE_FILES = ["vae/config.json", "vae/diffusion_pytorch_model.safetensors"]
+DINOV3_CONFIG = {
+    "architectures": ["DINOv3ViTModel"], "model_type": "dinov3_vit", "attention_dropout": 0.0,
+    "drop_path_rate": 0.0, "hidden_act": "silu", "hidden_size": 1280, "image_size": 224,
+    "initializer_range": 0.02, "intermediate_size": 5120, "key_bias": False, "layer_norm_eps": 1e-05,
+    "layerscale_value": 1.0, "mlp_bias": True, "num_attention_heads": 20, "num_channels": 3,
+    "num_hidden_layers": 32, "num_register_tokens": 4, "patch_size": 16, "pos_embed_jitter": None,
+    "pos_embed_rescale": 2.0, "pos_embed_shift": None, "proj_bias": True, "query_bias": True,
+    "rope_theta": 100.0, "torch_dtype": "float32", "use_gated_mlp": True, "value_bias": True,
+}
 
 # Quality presets of Idol Image to 3D Gaussians. web/idol_presets.js reads this table from the node definition.
 PRESETS = {
@@ -50,6 +66,7 @@ PRESETS = {
 }
 
 IDOL_DIR = os.path.join(folder_paths.models_dir, "idol")
+ENCODERS_DIR = os.path.join(IDOL_DIR, "encoders")
 os.makedirs(IDOL_DIR, exist_ok=True)
 folder_paths.add_model_folder_path("idol", IDOL_DIR)
 
@@ -121,8 +138,86 @@ def _download_custom_repo(repo_id: str) -> str:
     return target
 
 
+def _dinov3_from_timm(state: dict) -> dict:
+    """timm vit_huge_plus_patch16_dinov3 state dict -> transformers DINOv3ViTModel state dict."""
+    hidden = state["cls_token"].shape[-1]
+    out = {
+        "embeddings.cls_token": state["cls_token"],
+        "embeddings.register_tokens": state["reg_token"],
+        "embeddings.mask_token": torch.zeros(1, 1, hidden),
+        "embeddings.patch_embeddings.weight": state["patch_embed.proj.weight"],
+        "embeddings.patch_embeddings.bias": state["patch_embed.proj.bias"],
+        "norm.weight": state["norm.weight"],
+        "norm.bias": state["norm.bias"],
+    }
+    renames = [("attn.proj", "attention.o_proj"), ("mlp.fc1_g", "mlp.gate_proj"), ("mlp.fc1_x", "mlp.up_proj"),
+               ("mlp.fc2", "mlp.down_proj"), ("norm1", "norm1"), ("norm2", "norm2")]
+    blocks = 1 + max(int(key.split(".")[1]) for key in state if key.startswith("blocks."))
+    for i in range(blocks):
+        src, dst = f"blocks.{i}.", f"layer.{i}."
+        q, k, v = state[src + "attn.qkv.weight"].chunk(3)
+        out[dst + "attention.q_proj.weight"] = q.contiguous()
+        out[dst + "attention.k_proj.weight"] = k.contiguous()
+        out[dst + "attention.v_proj.weight"] = v.contiguous()
+        out[dst + "attention.q_proj.bias"] = torch.zeros(hidden)
+        out[dst + "attention.v_proj.bias"] = torch.zeros(hidden)
+        for old, new in renames:
+            for param in ("weight", "bias"):
+                out[f"{dst}{new}.{param}"] = state[f"{src}{old}.{param}"]
+        out[dst + "layer_scale1.lambda1"] = state[src + "gamma_1"]
+        out[dst + "layer_scale2.lambda1"] = state[src + "gamma_2"]
+    return out
+
+
+def _ensure_dinov3() -> str:
+    """models/idol/encoders/dinov3-vith16plus, downloaded from timm (not gated) and converted on first use."""
+    target = os.path.join(ENCODERS_DIR, "dinov3-vith16plus")
+    weights = os.path.join(target, "model.safetensors")
+    if os.path.isfile(weights) and os.path.isfile(os.path.join(target, "config.json")):
+        return target
+    import shutil
+    from huggingface_hub import hf_hub_download
+    from safetensors.torch import load_file, save_file
+
+    staging = os.path.join(IDOL_DIR, ".download")
+    log.info("Downloading DINOv3 ViT-H+ (3.4 GB) from %s to %s", DINOV3_TIMM_REPO, target)
+    source = hf_hub_download(DINOV3_TIMM_REPO, "model.safetensors", local_dir=staging)
+    license_file = hf_hub_download(DINOV3_TIMM_REPO, "LICENSE.md", local_dir=staging)
+    state = _dinov3_from_timm(load_file(source))
+    os.makedirs(target, exist_ok=True)
+    with open(os.path.join(target, "config.json"), "w") as f:
+        json.dump(DINOV3_CONFIG, f, indent=2)
+    shutil.copyfile(license_file, os.path.join(target, "LICENSE.md"))
+    save_file(state, weights + ".tmp", metadata={"format": "pt"})
+    os.replace(weights + ".tmp", weights)
+    del state
+    shutil.rmtree(staging, ignore_errors=True)
+    return target
+
+
+def _ensure_flux2_vae() -> str:
+    """models/idol/encoders/flux2-vae (with a vae/ subfolder), downloaded from FLUX.2 klein (not gated)."""
+    from huggingface_hub import hf_hub_download
+    target = os.path.join(ENCODERS_DIR, "flux2-vae")
+    for name in FLUX2_VAE_FILES:
+        if not os.path.isfile(os.path.join(target, name)):
+            log.info("Downloading the FLUX.2 VAE from %s to %s", FLUX2_VAE_REPO, target)
+            hf_hub_download(FLUX2_VAE_REPO, name, local_dir=target)
+    return target
+
+
+def _encoder_source(user_value: str, config_value: str, weights_dir: str):
+    """The user's folder or repo id; else a local folder named in config.json (a converted repo); else None (auto)."""
+    chosen = _resolve_source(user_value, weights_dir)
+    if chosen:
+        return chosen
+    from_config = _resolve_source(config_value, weights_dir)
+    return from_config if from_config and os.path.isdir(from_config) else None
+
+
 def _prepare_weights(idol, choice: str, dinov3_source: str, flux2_vae_source: str, custom_repo: str = ""):
-    """Find (and if needed download) the Idol weights; check access to the gated encoders *before* any big download."""
+    """Find (and if needed download) the Idol weights and the image encoders. A gated encoder repo is only used
+    when the user names one, and its access is checked *before* any big download."""
     need_download = False
     if (custom_repo or "").strip():
         weights_dir = _download_custom_repo(custom_repo)
@@ -141,11 +236,12 @@ def _prepare_weights(idol, choice: str, dinov3_source: str, flux2_vae_source: st
     with open(os.path.join(weights_dir, "config.json")) as f:
         config = json.load(f)
     encoders = config["image_encoders"]
-    dinov3_repo = _resolve_source(dinov3_source, weights_dir) or _resolve_source(encoders["dinov3"], weights_dir)
-    flux2_repo = (_resolve_source(flux2_vae_source, weights_dir)
-                  or _resolve_source(encoders["flux2_vae"], weights_dir))
+    if (flux2_vae_source or "").strip() == FLUX2_VAE_REPO:  # older workflows typed the repo of the automatic VAE
+        flux2_vae_source = ""
+    dinov3_repo = _encoder_source(dinov3_source, encoders["dinov3"], weights_dir)
+    flux2_repo = _encoder_source(flux2_vae_source, encoders["flux2_vae"], weights_dir)
 
-    remote = [repo for repo in (dinov3_repo, flux2_repo) if not os.path.isdir(repo)]
+    remote = [repo for repo in (dinov3_repo, flux2_repo) if repo and not os.path.isdir(repo)]
     try:
         idol.require_encoder_access(remote)
     except idol.EncoderAccessError as error:
@@ -155,7 +251,7 @@ def _prepare_weights(idol, choice: str, dinov3_source: str, flux2_vae_source: st
         from huggingface_hub import snapshot_download
         log.info("Downloading Idol weights to %s", weights_dir)
         snapshot_download(HF_REPO, allow_patterns=idol.WEIGHT_FILES, local_dir=weights_dir)
-    return weights_dir, config, dinov3_repo, flux2_repo
+    return weights_dir, config, dinov3_repo or _ensure_dinov3(), flux2_repo or _ensure_flux2_vae()
 
 
 class IdolBundle:
@@ -192,13 +288,14 @@ class IdolModelLoader:
                                               "your-name/idol-comfyui. Overrides 'weights'. A private repo needs "
                                               "'hf auth login' or HF_TOKEN."}),
                 "dinov3_source": ("STRING", {"default": "", "tooltip":
-                                             "Optional local folder (or HF repo id) for DINOv3 ViT-H+. "
-                                             "Empty = the gated facebook repo from config.json."}),
-                "flux2_vae_source": ("STRING", {"default": FLUX2_VAE_UNGATED, "tooltip":
-                                                "Local folder (containing a 'vae' subfolder) or HF repo id for the "
-                                                "FLUX.2 VAE. The default (FLUX.2 klein, Apache-2.0, not gated) holds "
-                                                "the same VAE weights in bf16, which is the dtype Idol runs it in. "
-                                                "Empty = black-forest-labs/FLUX.2-dev (gated)."}),
+                                             "Empty = automatic: DINOv3 ViT-H+ in models/idol/encoders, downloaded "
+                                             "once from timm (no Hugging Face login needed, same weights as "
+                                             "Meta's gated repo). Or a local folder, or a HF repo id (HF cache)."}),
+                "flux2_vae_source": ("STRING", {"default": "", "tooltip":
+                                                "Empty = automatic: the FLUX.2 VAE in models/idol/encoders, "
+                                                "downloaded once from FLUX.2 klein (no login needed, same VAE as "
+                                                "FLUX.2-dev). Or a local folder containing 'vae/', or a HF repo id "
+                                                "(HF cache)."}),
             },
         }
 

@@ -23,7 +23,7 @@
       "title": "How to use",
       "properties": {},
       "widgets_values": [
-        "## Idol: one image to a 3D Gaussian splat\n\n**First run** downloads the Idol weights (~3 GB) to `models/idol/` and DINOv3 to the Hugging Face cache. DINOv3 is gated: accept its terms on Hugging Face and log in with `hf auth login`.\n\n**Model Loader**: `flux2_vae_source` points to FLUX.2 klein, which is not gated and has the same VAE as FLUX.2-dev.\n\n**Input image**\n- PNG with transparency: keep the `MASK` link. `invert_mask` is on by default because Load Image stores alpha inverted. Turn it off for masks with 1 = object (most background-removal nodes).\n- JPG or an image without alpha: delete the `MASK` link (or leave it, an empty mask is ignored). BiRefNet removes the background.\n\n**preset**: lowest / low / medium / high / ultra set steps and num_gaussians (medium = reference). Editing those values switches it to custom.\n\n**mode**: `synthetic` for renders and generated images, `real` for photos.\n\n**num_gaussians**: 32,768 to 1,048,576. More is sharper and slower to view.\n\n**fast_sampling**: batched CFG + cuDNN attention. Turn it off if VRAM is low.\n\n**Output**: the `.ply` goes to `output/idol/`. Preview Splat shows it in the graph. Connect `model_3d` to *Get Splat* for the other core splat nodes (render, transform, splat to mesh)."
+        "## Idol: one image to a 3D Gaussian splat\n\n**First run** downloads about 6.6 GB into `models/idol/` (Idol, DINOv3 and the FLUX.2 VAE). No Hugging Face account or login is needed.\n\n**Input image**\n- PNG with transparency: keep the `MASK` link. `invert_mask` is on by default because Load Image stores alpha inverted. Turn it off for masks with 1 = object (most background-removal nodes).\n- JPG or an image without alpha: delete the `MASK` link (or leave it, an empty mask is ignored). BiRefNet removes the background.\n\n**preset**: lowest / low / medium / high / ultra set steps and num_gaussians (medium = reference). Editing those values switches it to custom.\n\n**mode**: `synthetic` for renders and generated images, `real` for photos.\n\n**num_gaussians**: 32,768 to 1,048,576. More is sharper and slower to view.\n\n**fast_sampling**: batched CFG + cuDNN attention. Turn it off if VRAM is low.\n\n**Output**: the `.ply` goes to `output/idol/`. Preview Splat shows it in the graph. Connect `model_3d` to *Get Splat* for the other core splat nodes (render, transform, splat to mesh)."
       ],
       "color": "#432",
       "bgcolor": "#653"
@@ -100,7 +100,7 @@
         "bf16",
         "",
         "",
-        "black-forest-labs/FLUX.2-klein-4B"
+        ""
       ]
     },
     {

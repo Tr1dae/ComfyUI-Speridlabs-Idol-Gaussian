@@ -22,20 +22,22 @@ python_embeded\python.exe -m pip install hatchling
 python_embeded\python.exe -m pip install --no-build-isolation -r ComfyUI\custom_nodes\ComfyUI-Idol\requirements.txt
 ```
 
-## Get access to the encoders
-
-Idol uses DINOv3, a gated encoder from Hugging Face. A gated model needs your approval of its terms before you can download it.
-
-1. Request access to [facebook/dinov3-vith16plus-pretrain-lvd1689m](https://huggingface.co/facebook/dinov3-vith16plus-pretrain-lvd1689m).
-2. Run `hf auth login`, or set the `HF_TOKEN` environment variable.
-
-The FLUX.2 VAE comes from [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) by default. That repository is not gated, and it holds the same VAE as FLUX.2-dev in bf16, the dtype that Idol runs the VAE in, so the results are identical. To use the gated [black-forest-labs/FLUX.2-dev](https://huggingface.co/black-forest-labs/FLUX.2-dev) instead, clear `flux2_vae_source`.
-
-The loader checks your access before it downloads large files. If access is missing, the loader names the repository that you must fix. Both encoders download to the Hugging Face cache, not to `ComfyUI/models`.
-
 ## Weights
 
-The loader downloads the weights (about 3 GB) to `ComfyUI/models/idol/speridlabs_idol/`.
+No Hugging Face account or login is needed. On the first run the loader downloads everything into `ComfyUI/models/idol/`:
+
+| Folder | Content | Source | Size |
+|---|---|---|---|
+| `speridlabs_idol/` | Idol (denoiser, decoders, BiRefNet) | [speridlabs/idol](https://huggingface.co/speridlabs/idol) | 3 GB |
+| `encoders/dinov3-vith16plus/` | DINOv3 ViT-H+ image encoder | [timm/vit_huge_plus_patch16_dinov3.lvd1689m](https://huggingface.co/timm/vit_huge_plus_patch16_dinov3.lvd1689m) | 3.4 GB |
+| `encoders/flux2-vae/` | FLUX.2 VAE | [black-forest-labs/FLUX.2-klein-4B](https://huggingface.co/black-forest-labs/FLUX.2-klein-4B) | 0.2 GB |
+
+The Idol SDK names two gated repositories for the encoders: [facebook/dinov3-vith16plus-pretrain-lvd1689m](https://huggingface.co/facebook/dinov3-vith16plus-pretrain-lvd1689m) and [black-forest-labs/FLUX.2-dev](https://huggingface.co/black-forest-labs/FLUX.2-dev). The sources above are not gated and give the same results:
+
+- timm's DINOv3 holds the same tensors as Meta's under other names. The loader renames them once, after the download. All 615 tensors are bit-identical to Meta's. DINOv3 is under the [DINOv3 License](https://ai.meta.com/resources/models-and-libraries/dinov3-license/), and a copy of it is saved next to the weights.
+- FLUX.2 klein holds the FLUX.2-dev VAE in bf16, the dtype that Idol runs the VAE in.
+
+Nothing goes to the Hugging Face cache, unless you type a Hugging Face repository ID in `dinov3_source` or `flux2_vae_source`.
 
 To work offline, put the weights in any folder under `models/idol/`. The folder must contain these files:
 
@@ -47,7 +49,7 @@ To work offline, put the weights in any folder under `models/idol/`. The folder 
 
 Then select the folder in the loader.
 
-The optional inputs `dinov3_source` and `flux2_vae_source` accept a local folder or a Hugging Face repository ID. For FLUX.2, use the folder that contains `vae/`.
+The optional inputs `dinov3_source` and `flux2_vae_source` are empty by default (automatic). They also accept a local folder or a Hugging Face repository ID. For FLUX.2, use the folder that contains `vae/`. A gated repository ID needs access and `hf auth login`. The loader checks access before it downloads large files.
 
 The optional input `custom_hf_repo` accepts a repository that you made with the converter (see the next section). It overrides the `weights` list.
 

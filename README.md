@@ -39,15 +39,38 @@ The Idol SDK names two gated repositories for the encoders: [facebook/dinov3-vit
 
 Nothing goes to the Hugging Face cache, unless you type a Hugging Face repository ID in `dinov3_source` or `flux2_vae_source`.
 
-To work offline, put the weights in any folder under `models/idol/`. The folder must contain these files:
+### Manual download
 
-- `config.json`
-- `denoiser.safetensors`
-- `decoder.safetensors`
-- `decoder_gs.safetensors`
-- `birefnet.safetensors`
+If the automatic download fails, create the folders below and place each file at the listed path. Leave `dinov3_source` and `flux2_vae_source` empty so the loader uses them.
 
-Then select the folder in the loader.
+**Idol** → `ComfyUI/models/idol/speridlabs_idol/`
+
+| File | URL |
+|---|---|
+| `config.json` | https://huggingface.co/speridlabs/idol/resolve/main/config.json |
+| `denoiser.safetensors` | https://huggingface.co/speridlabs/idol/resolve/main/denoiser.safetensors |
+| `decoder.safetensors` | https://huggingface.co/speridlabs/idol/resolve/main/decoder.safetensors |
+| `decoder_gs.safetensors` | https://huggingface.co/speridlabs/idol/resolve/main/decoder_gs.safetensors |
+| `birefnet.safetensors` | https://huggingface.co/speridlabs/idol/resolve/main/birefnet.safetensors |
+
+**FLUX.2 VAE** → `ComfyUI/models/idol/encoders/flux2-vae/vae/`
+
+| File | URL |
+|---|---|
+| `config.json` | https://huggingface.co/black-forest-labs/FLUX.2-klein-4B/resolve/main/vae/config.json |
+| `diffusion_pytorch_model.safetensors` | https://huggingface.co/black-forest-labs/FLUX.2-klein-4B/resolve/main/vae/diffusion_pytorch_model.safetensors |
+
+**DINOv3 ViT-H+** → `ComfyUI/models/idol/encoders/dinov3-vith16plus/`
+
+Drop-in files must be the transformers layout (what Meta ships). Automatic download uses the ungated timm copy and renames it once; a raw timm `model.safetensors` is **not** drop-in. For a manual place-as-is install, use Meta's files (gated — accept the terms and log in if the links return 401):
+
+| File | URL |
+|---|---|
+| `config.json` | https://huggingface.co/facebook/dinov3-vith16plus-pretrain-lvd1689m/resolve/main/config.json |
+| `model.safetensors` | https://huggingface.co/facebook/dinov3-vith16plus-pretrain-lvd1689m/resolve/main/model.safetensors |
+| `LICENSE.md` (optional) | https://huggingface.co/facebook/dinov3-vith16plus-pretrain-lvd1689m/resolve/main/LICENSE.md |
+
+To use a different local Idol folder, put the five Idol files in any subdirectory of `models/idol/` and select that folder in the loader.
 
 The optional inputs `dinov3_source` and `flux2_vae_source` are empty by default (automatic). They also accept a local folder or a Hugging Face repository ID. For FLUX.2, use the folder that contains `vae/`. A gated repository ID needs access and `hf auth login`. The loader checks access before it downloads large files.
 

@@ -575,6 +575,20 @@ class IdolSavePLY:
     CATEGORY = "Idol"
 
     def save(self, gaussian, filename_prefix):
+        # Exact path: prefix ending in ".ply" writes that file under output/ with no counter.
+        # Example: "VGH_3d/chair.ply" -> output/VGH_3d/chair.ply
+        prefix = filename_prefix.replace("\\", "/")
+        if prefix.lower().endswith(".ply"):
+            output_dir = folder_paths.get_output_directory()
+            path = os.path.abspath(os.path.join(output_dir, prefix))
+            if not folder_paths.is_within_directory(output_dir, path):
+                raise ValueError(f"Invalid filename_prefix: {filename_prefix!r}")
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            gaussian.save_ply(path)
+            rel = os.path.relpath(path, output_dir)
+            result = (path,) + ((File3D(path),) if File3D is not None else ())
+            return {"ui": {"text": [rel]}, "result": result}
+
         folder, name, counter, subfolder, _ = folder_paths.get_save_image_path(
             filename_prefix, folder_paths.get_output_directory(), 0, 0)
         filename = f"{name}_{counter:05}_.ply"
